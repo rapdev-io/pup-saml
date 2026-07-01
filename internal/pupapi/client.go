@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 )
 
 // Client makes authenticated requests to the Datadog API using credentials
@@ -37,11 +38,13 @@ func (c *Client) GetRaw(path string) ([]byte, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	} else {
+	// v1 endpoints require API key + App key; they reject OAuth bearer tokens.
+	// v2 endpoints accept either, but prefer bearer when available.
+	if strings.HasPrefix(path, "v1/") || c.token == "" {
 		req.Header.Set("DD-API-KEY", c.apiKey)
 		req.Header.Set("DD-APPLICATION-KEY", c.appKey)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -59,8 +62,14 @@ func (c *Client) Get(path string, v any) error {
 	if err != nil {
 		return err
 	}
+	if status == 401 {
+		if strings.HasPrefix(path, "v1/") {
+			return fmt.Errorf("HTTP 401 for %s: v1 endpoints require DD_API_KEY + DD_APP_KEY (not available in this session)", path)
+		}
+		return fmt.Errorf("HTTP 401 for %s: OAuth token lacks required scope (user_access_read)", path)
+	}
 	if status == 403 {
-		return fmt.Errorf("HTTP 403: insufficient permissions (need user_access_read scope)")
+		return fmt.Errorf("HTTP 403 for %s: insufficient permissions", path)
 	}
 	if status >= 400 {
 		return fmt.Errorf("HTTP %d for %s", status, path)
@@ -75,13 +84,8 @@ func (c *Client) Paginate(endpoint string) ([]json.RawMessage, error) {
 	pageNum := 0
 	for {
 		sep := "?"
-		if len(endpoint) > 0 {
-			for _, ch := range endpoint {
-				if ch == '?' {
-					sep = "&"
-					break
-				}
-			}
+		if strings.Contains(endpoint, "?") {
+			sep = "&"
 		}
 		path := fmt.Sprintf("%s%spage[size]=100&page[number]=%d", endpoint, sep, pageNum)
 		var page struct {
