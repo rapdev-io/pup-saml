@@ -3,6 +3,7 @@ package pupapi
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -17,12 +18,37 @@ func New(org string) *Client {
 	return &Client{org: org}
 }
 
+// pupEnv returns the current environment with pup-forwarded DD credentials stripped.
+// When pup runs an extension it injects DD_ACCESS_TOKEN etc. into the env; if those
+// vars are present when we spawn a child `pup api` process, pup uses them directly
+// instead of the stored session for --org, causing 401s. Stripping them forces the
+// child pup to resolve auth from its own session store.
+func pupEnv() []string {
+	strip := map[string]bool{
+		"DD_ACCESS_TOKEN": true,
+		"DD_API_KEY":      true,
+		"DD_APP_KEY":      true,
+	}
+	var env []string
+	for _, e := range os.Environ() {
+		key := e
+		if i := strings.IndexByte(e, '='); i >= 0 {
+			key = e[:i]
+		}
+		if !strip[key] {
+			env = append(env, e)
+		}
+	}
+	return env
+}
+
 func (c *Client) GetRaw(path string) ([]byte, error) {
 	args := []string{"api", path, "--no-agent"}
 	if c.org != "" {
 		args = append(args, "--org", c.org)
 	}
 	cmd := exec.Command("pup", args...)
+	cmd.Env = pupEnv()
 	out, err := cmd.Output()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
