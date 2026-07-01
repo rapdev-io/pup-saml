@@ -12,7 +12,7 @@ import (
 )
 
 func runDiscover(org string) {
-	client := pupapi.New()
+	client := pupapi.New(org)
 	out := DiscoverOutput{Org: org}
 
 	var (
@@ -59,15 +59,11 @@ func runDiscover(org string) {
 	// 2. SP metadata
 	go func() {
 		defer wg.Done()
-		body, status, err := client.GetRaw("v1/saml/metadata")
+		body, err := client.GetRaw("v1/saml/metadata")
 		mu.Lock()
 		defer mu.Unlock()
-		if err != nil || status == 404 {
+		if err != nil {
 			out.SPMetadata = SPMetadata{Error: "not available"}
-			return
-		}
-		if status == 403 {
-			out.SPMetadata = SPMetadata{Error: "HTTP 403"}
 			return
 		}
 		var ed EntityDescriptor
@@ -206,8 +202,8 @@ func runDiscover(org string) {
 	// 6. Service accounts
 	go func() {
 		defer wg.Done()
-		body, status, err := client.GetRaw("v2/service_accounts")
-		if err != nil || status == 403 || status == 404 {
+		body, err := client.GetRaw("v2/service_accounts")
+		if err != nil {
 			return
 		}
 		var resp struct {

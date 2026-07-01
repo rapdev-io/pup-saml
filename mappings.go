@@ -8,8 +8,8 @@ import (
 	"github.com/rapdev-io/pup-saml/internal/pupapi"
 )
 
-func runMappings(_ string) {
-	client := pupapi.New()
+func runMappings(org string) {
+	client := pupapi.New(org)
 
 	roleLookup := map[string]string{}
 	var rolesData rolesResp
