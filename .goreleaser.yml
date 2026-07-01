@@ -1,0 +1,29 @@
+version: 2
+
+project_name: pup-saml
+
+builds:
+  - binary: pup-saml
+    main: .
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - format: binary
+    name_template: "pup-saml-{{ .Os }}-{{ if eq .Arch \"amd64\" }}x86_64{{ else if eq .Arch \"arm64\" }}aarch64{{ else }}{{ .Arch }}{{ end }}"
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: rapdev-io
+    name: pup-saml
+  name_template: "v{{ .Version }}"
